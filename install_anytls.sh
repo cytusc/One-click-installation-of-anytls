@@ -38,9 +38,28 @@ case $ARCH in
     *)       echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
 
-# 配置参数（注意这里去掉了 linux_ 后面多余的空格）
-DOWNLOAD_URL="https://github.com/anytls/anytls-go/releases/download/v0.0.8/anytls_0.0.8_linux_${BINARY_ARCH}.zip"
-ZIP_FILE="/tmp/anytls_0.0.8_linux_${BINARY_ARCH}.zip"
+# 获取最新版本
+get_latest_version() {
+    # 尝试从 GitHub API 获取最新版本标签
+    local latest_version
+    latest_version=$(curl -s https://api.github.com/repos/anytls/anytls-go/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    
+    if [ -z "$latest_version" ]; then
+        echo "v0.0.12" # 获取失败时的默认版本
+    else
+        echo "$latest_version"
+    fi
+}
+
+# 动态配置参数
+VERSION_TAG=$(get_latest_version)
+echo "正在准备安装 anytls 版本: ${VERSION_TAG}..."
+
+# 处理版本号 (去除 v 前缀用于文件名)
+VERSION_NUM=${VERSION_TAG#v}
+
+DOWNLOAD_URL="https://github.com/anytls/anytls-go/releases/download/${VERSION_TAG}/anytls_${VERSION_NUM}_linux_${BINARY_ARCH}.zip"
+ZIP_FILE="/tmp/anytls_${VERSION_NUM}_linux_${BINARY_ARCH}.zip"
 BINARY_DIR="/usr/local/bin"
 BINARY_NAME="anytls-server"
 SERVICE_NAME="anytls"
