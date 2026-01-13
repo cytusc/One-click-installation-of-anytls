@@ -80,6 +80,36 @@ function show_menu() {
 }
 
 # 安装功能
+# 生成随机端口 (10000-65535)
+function get_random_port() {
+    local port
+    while true; do
+        # 生成 10000-65535 之间的随机数
+        port=$((RANDOM + 10000)) 
+        [ $port -gt 65535 ] && port=$((port % 55535 + 10000))
+        
+        # 检查端口占用 (尝试使用 ss 或 netstat，如果都没有则跳过检查)
+        if command -v ss &>/dev/null; then
+            if ss -lnt | grep -q ":$port "; then continue; fi
+        elif command -v netstat &>/dev/null; then
+            if netstat -lnt | grep -q ":$port "; then continue; fi
+        fi
+        echo "$port"
+        return
+    done
+}
+
+# 生成随机密码 (16位字母数字)
+function generate_password() {
+    # 优先使用 openssl，次选 /dev/urandom
+    if command -v openssl &>/dev/null; then
+        openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 16
+    else
+        tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 16
+    fi
+}
+
+# 安装功能
 function install_anytls() {
     # 下载
     echo "[1/5] 下载 anytls (${BINARY_ARCH}架构)..."
@@ -98,22 +128,20 @@ function install_anytls() {
     }
     chmod +x "$BINARY_DIR/$BINARY_NAME"
 
-    # 输入密码
-    read -p "设置 anytls 的密码: " PASSWORD
-    [ -z "$PASSWORD" ] && {
-        echo "错误：密码不能为空！"
-        exit 1
-    }
-
+    # 生成配置
+    echo "正在生成随机配置..."
+    PASSWORD=$(generate_password)
+    PORT=$(get_random_port)
+    
     # 配置服务
-    echo "[3/5] 配置 systemd 服务..."
+    echo "[3/5] 配置 systemd 服务 (端口: $PORT)..."
     cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=anytls Service
 After=network.target
 
 [Service]
-ExecStart=$BINARY_DIR/$BINARY_NAME -l 0.0.0.0:8443 -p $PASSWORD
+ExecStart=$BINARY_DIR/$BINARY_NAME -l 0.0.0.0:$PORT -p $PASSWORD
 Restart=always
 User=root
 Group=root
@@ -138,8 +166,8 @@ EOF
     echo -e "\n\033[32m√ 安装完成！\033[0m"
     echo -e "\033[32m√ 架构类型: ${BINARY_ARCH}\033[0m"
     echo -e "\033[32m√ 服务名称: $SERVICE_NAME\033[0m"
-    echo -e "\033[32m√ 监听端口: 0.0.0.0:8443\033[0m"
-    echo -e "\033[32m√ 密码已设置为: $PASSWORD\033[0m"
+    echo -e "\033[32m√ 监听端口: 0.0.0.0:$PORT (随机生成)\033[0m"
+    echo -e "\033[32m√ 密码: $PASSWORD (随机生成)\033[0m"
     echo -e "\n\033[33m管理命令:\033[0m"
     echo -e "  启动: systemctl start $SERVICE_NAME"
     echo -e "  停止: systemctl stop $SERVICE_NAME"
@@ -148,7 +176,7 @@ EOF
     
     # 高亮显示连接信息
     echo -e "\n\033[36m\033[1m〓 NekoBox连接信息 〓\033[0m"
-    echo -e "\033[30;43m\033[1m anytls://$PASSWORD@$SERVER_IP:8443/?insecure=1 \033[0m"
+    echo -e "\033[30;43m\033[1m anytls://$PASSWORD@$SERVER_IP:$PORT/?insecure=1 \033[0m"
     echo -e "\033[33m\033[1m请妥善保管此连接信息！\033[0m"
 }
 
