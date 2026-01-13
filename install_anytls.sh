@@ -140,13 +140,16 @@ function get_node_name() {
         local country=$(echo "$info" | sed -n '1p')
         local isp=$(echo "$info" | sed -n '2p')
         
-        # 清理 ISP 名称 (只保留字母数字，空格转连字符)
-        isp=$(echo "$isp" | sed 's/ /-/g' | tr -cd 'a-zA-Z0-9-')
-        # 截取 ISP 长度，避免过长
+        # 清理 ISP 名称: 去除空格和连字符，只保留字母数字，使名称更紧凑
+        # 例如 "Alice Networks" -> "AliceNetworks"
+        isp=$(echo "$isp" | tr -d ' -' | tr -cd 'a-zA-Z0-9')
+        
+        # 截取 ISP 长度
         isp=${isp:0:15}
         
-        # 拼接名称: Anytls-ISP-Country
-        echo "Anytls-${isp}-${country}"
+        # 拼接名称: Anytls-Country-ISP (使用连字符，ISP名称已清洗，无歧义)
+        # 例如: Anytls-HK-AliceNetworks
+        echo "Anytls-${country}-${isp}"
     else
         # 获取失败时的回退名称
         echo "Anytls-Node-$(date +%s)"
