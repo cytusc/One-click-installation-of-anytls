@@ -87,12 +87,16 @@ function show_menu() {
     echo "-------------------------------------"
     echo "1. 安装 anytls"
     echo "2. 卸载 anytls"
+    echo "3. 查看配置"
+    echo "4. 修改配置"
     echo "0. 退出"
     echo "-------------------------------------"
-    read -p "请输入选项 [0-2]: " choice
+    read -p "请输入选项 [0-4]: " choice
     case $choice in
         1) install_anytls ;;
         2) uninstall_anytls ;;
+        3) view_config ;;
+        4) modify_config ;;
         0) exit 0 ;;
         *) echo "无效选项！" && sleep 1 && show_menu ;;
     esac
@@ -259,6 +263,100 @@ function uninstall_anytls() {
     fi
 
     echo -e "\n\033[32m[结果]\033[0m anytls 已完全卸载！"
+}
+
+# 查看配置
+function view_config() {
+    if [ ! -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+        echo "错误：anytls 未安装或服务文件不存在！"
+        return
+    fi
+
+    # 从服务文件中提取端口和密码
+    local service_content=$(cat "/etc/systemd/system/$SERVICE_NAME.service")
+    # 提取端口: 匹配 -l 0.0.0.0:(数字)
+    local current_port=$(echo "$service_content" | grep -oP '\-l 0.0.0.0:\K\d+')
+    # 提取密码: 匹配 -p (非空格字符)
+    local current_password=$(echo "$service_content" | grep -oP '\-p \K\S+')
+    
+    if [ -z "$current_port" ] || [ -z "$current_password" ]; then
+        echo "错误：无法从配置文件中读取配置信息！"
+        return
+    fi
+    
+    local ip=$(get_ip)
+    local node_name=$(get_node_name)
+    
+    echo -e "\n\033[36m\033[1m〓 当前配置信息 〓\033[0m"
+    echo -e "端口: \033[32m$current_port\033[0m"
+    echo -e "密码: \033[32m$current_password\033[0m"
+    echo -e "节点: \033[32m$node_name\033[0m"
+    
+    echo -e "\n\033[36m\033[1m〓 NekoBox连接信息 〓\033[0m"
+    echo -e "\033[30;43m\033[1m anytls://$current_password@$ip:$current_port/?insecure=1#$node_name \033[0m"
+}
+
+# 修改配置
+function modify_config() {
+    if [ ! -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+        echo "错误：anytls 未安装！"
+        return
+    fi
+
+    echo "-------------------------------------"
+    echo " 修改配置"
+    echo "-------------------------------------"
+    echo "1. 修改端口"
+    echo "2. 修改密码"
+    echo "0. 返回主菜单"
+    echo "-------------------------------------"
+    read -p "请输入选项 [0-2]: " sub_choice
+
+    case $sub_choice in
+        1)
+            echo "当前操作：修改端口"
+            read -p "请输入新端口 (留空则随机生成): " new_port
+            if [ -z "$new_port" ]; then
+                new_port=$(get_random_port)
+                echo "已生成随机端口: $new_port"
+            fi
+            
+            # 简单的端口合法性检查
+            if ! [[ "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+                echo "错误：无效的端口号！"
+                return
+            fi
+            
+            # 使用 sed 替换端口
+            sed -i "s/-l 0.0.0.0:[0-9]*/-l 0.0.0.0:$new_port/" "/etc/systemd/system/$SERVICE_NAME.service"
+            
+            echo "正在重启服务..."
+            systemctl daemon-reload
+            systemctl restart $SERVICE_NAME
+            echo "✅ 端口已修改为: $new_port"
+            view_config
+            ;;
+        2)
+            echo "当前操作：修改密码"
+            read -p "请输入新密码 (留空则随机生成): " new_password
+            if [ -z "$new_password" ]; then
+                new_password=$(generate_password)
+                echo "已生成随机密码: $new_password"
+            fi
+            
+            # 使用 sed 替换密码 (注意密码中可能含有特殊字符，这里假设密码为普通字母数字，如果是复杂字符需谨慎处理分隔符)
+            # 由于 generate_password 只生成字母数字，这里直接替换相对安全
+            sed -i "s/-p \S*/-p $new_password/" "/etc/systemd/system/$SERVICE_NAME.service"
+            
+            echo "正在重启服务..."
+            systemctl daemon-reload
+            systemctl restart $SERVICE_NAME
+            echo "✅ 密码已修改为: $new_password"
+            view_config
+            ;;
+        0) return ;;
+        *) echo "无效选项！" ;;
+    esac
 }
 
 # 启动菜单
