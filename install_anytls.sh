@@ -128,6 +128,31 @@ function generate_password() {
     fi
 }
 
+# 获取节点名称 (Anytls-ISP-Country)
+function get_node_name() {
+    # 使用 ip-api.com 获取信息 (line格式: CountryCode\nISP)
+    local api_url="http://ip-api.com/line/?fields=countryCode,isp"
+    local info
+    
+    info=$(curl -s --connect-timeout 5 "$api_url")
+    
+    if [ $? -eq 0 ] && [ -n "$info" ]; then
+        local country=$(echo "$info" | sed -n '1p')
+        local isp=$(echo "$info" | sed -n '2p')
+        
+        # 清理 ISP 名称 (只保留字母数字，空格转连字符)
+        isp=$(echo "$isp" | sed 's/ /-/g' | tr -cd 'a-zA-Z0-9-')
+        # 截取 ISP 长度，避免过长
+        isp=${isp:0:15}
+        
+        # 拼接名称: Anytls-ISP-Country
+        echo "Anytls-${isp}-${country}"
+    else
+        # 获取失败时的回退名称
+        echo "Anytls-Node-$(date +%s)"
+    fi
+}
+
 # 安装功能
 function install_anytls() {
     # 下载
@@ -151,6 +176,7 @@ function install_anytls() {
     echo "正在生成随机配置..."
     PASSWORD=$(generate_password)
     PORT=$(get_random_port)
+    NODE_NAME=$(get_node_name)
     
     # 配置服务
     echo "[3/5] 配置 systemd 服务 (端口: $PORT)..."
@@ -187,6 +213,7 @@ EOF
     echo -e "\033[32m√ 服务名称: $SERVICE_NAME\033[0m"
     echo -e "\033[32m√ 监听端口: 0.0.0.0:$PORT (随机生成)\033[0m"
     echo -e "\033[32m√ 密码: $PASSWORD (随机生成)\033[0m"
+    echo -e "\033[32m√ 节点名称: $NODE_NAME (自动识别)\033[0m"
     echo -e "\n\033[33m管理命令:\033[0m"
     echo -e "  启动: systemctl start $SERVICE_NAME"
     echo -e "  停止: systemctl stop $SERVICE_NAME"
@@ -195,7 +222,7 @@ EOF
     
     # 高亮显示连接信息
     echo -e "\n\033[36m\033[1m〓 NekoBox连接信息 〓\033[0m"
-    echo -e "\033[30;43m\033[1m anytls://$PASSWORD@$SERVER_IP:$PORT/?insecure=1 \033[0m"
+    echo -e "\033[30;43m\033[1m anytls://$PASSWORD@$SERVER_IP:$PORT/?insecure=1#$NODE_NAME \033[0m"
     echo -e "\033[33m\033[1m请妥善保管此连接信息！\033[0m"
 }
 
